@@ -1,61 +1,27 @@
 package com.agrichain.service;
 
 import com.agrichain.core.SkillLoader;
-import com.agrichain.entity.AgentRule;
 import com.agrichain.entity.SkillConfig;
 import com.agrichain.graph.repository.GraphQueryRepository; // 👈 引入图查询
-import com.agrichain.repository.AgentRuleRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class AgentRouterService {
 
-    private final AgentRuleRepository repository;
     private final GraphQueryRepository graphQueryRepository; // 👈 注入图数据库仓储
     private final SkillLoader skillLoader;
-    private final ChatClient.Builder chatClientBuilder;
+    private final SkillRoutingService skillRoutingService;
 
     public void routeAndExecute(String userQuery, String tenantId) {
         System.out.println("\n>>> [纯 Java Agent] 收到用户请求: " + userQuery);
 
         try {
-            // 1. 准备技能描述 & 查库拿历史规则
-            StringBuilder skillsInfo = new StringBuilder();
-            for (SkillConfig config : skillLoader.getAllSkills().values()) {
-                skillsInfo.append("- ").append(config.getName()).append(": ").append(config.getDescription()).append("\n");
-            }
-
-            List<AgentRule> activeRules = repository.findAll();
-            String historyRules = activeRules.stream()
-                    .filter(r -> "ACTIVE".equals(r.getStatus()))
-                    .map(AgentRule::getRuleContent)
-                    .collect(Collectors.joining("\n"));
-
-            // 2. 调大模型路由
-            String prompt = String.format("""
-                    你是一个企业级 AI 路由专家。请根据以下【可用技能列表】和【历史规则】，判断用户输入应该使用哪个 Skill。
-                    
-                    【可用技能列表】
-                    %s
-                    
-                    【历史避坑规则（必须严格遵守）】
-                    %s
-                    
-                    【用户输入】
-                    %s
-                    
-                    要求：只输出选中的 Skill 名称，不要输出任何标点、换行或其他文字。
-                    """, skillsInfo.toString(), historyRules.isEmpty() ? "暂无规则" : historyRules, userQuery);
-
             System.out.println(">>> [纯 Java Agent] 正在调用本地大模型进行意图路由...");
-            String selectedSkillName = chatClientBuilder.build().prompt()
-                    .user(prompt).call().content().trim().replace("\"", "").replace("'", "");
+            String selectedSkillName = skillRoutingService.route(userQuery, tenantId, Set.of("ACTIVE"));
 
             System.out.println(">>> [纯 Java Agent] 大模型决策出的 Skill: " + selectedSkillName);
             SkillConfig selectedSkill = skillLoader.getSkill(selectedSkillName);

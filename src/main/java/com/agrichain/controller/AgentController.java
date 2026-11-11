@@ -27,8 +27,8 @@ public class AgentController {
 
     // 👇 新增：触发自测进化
     @GetMapping("/eval")
-    public String runEval() {
-        return autoEvalService.runAutoEval();
+    public String runEval(@RequestParam String tenantId) {
+        return autoEvalService.runAutoEval(tenantId);
     }
 
     // 👇 新增：一键审批所有 PENDING 规则（演示用）
